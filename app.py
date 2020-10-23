@@ -1,372 +1,258 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "#wisnuadipradana17@yahoo.com\n",
-    "\n",
-    "import tweepy\n",
-    "import sqlite3\n",
-    "import pandas as pd\n",
-    "import re\n",
-    "import matplotlib.pyplot as plt\n",
-    "import numpy as np\n",
-    "from datetime import datetime, timedelta\n",
-    "from IPython.display import clear_output\n",
-    "import time \n",
-    "import progressbar \n",
-    "\n",
-    "class sanbercode():\n",
-    "    def __init__ (self):\n",
-    "        pass\n",
-    "    \n",
-    "    def update_data(self, search_words, date_since, date_until, basisdata):\n",
-    "        tokens = pd.read_csv('API_keysecret.csv')\n",
-    "\n",
-    "        consumer_key = tokens.iloc[0][1]\n",
-    "        consumer_secret = tokens.iloc[0][2]\n",
-    "        access_token = tokens.iloc[0][3]\n",
-    "        access_token_secret = tokens.iloc[0][4]\n",
-    "\n",
-    "        auth = tweepy.OAuthHandler(consumer_key, consumer_secret)\n",
-    "        auth.set_access_token(access_token, access_token_secret)\n",
-    "        api = tweepy.API(auth)\n",
-    "        \n",
-    "        new_search = search_words + \" -filter:retweets\"\n",
-    "\n",
-    "        tweets_covid = tweepy.Cursor(api.search, \n",
-    "                               q = new_search,\n",
-    "                               tweet_mode='extended',\n",
-    "                               lang='id',\n",
-    "                               since=date_since,\n",
-    "                               until=date_until,\n",
-    "                               result_type='recent',\n",
-    "                               include_entities=True,\n",
-    "                               monitor_rate_limit=True, \n",
-    "                               wait_on_rate_limit=True).items()\n",
-    "        \n",
-    "        max_value=len([i.id for i in tweets_covid])\n",
-    "        bar = progressbar.ProgressBar(max_value, widgets=widgets).start() \n",
-    "        \n",
-    "        Tanggal = []; Tweet = []; tweetid = []; username=[]\n",
-    "        for i,tweet in enumerate(tweets_covid):\n",
-    "            Tweet.append(tweet.full_text.strip())\n",
-    "            Tanggal.append(tweet.created_at) \n",
-    "            tweetid.append(tweet.id)\n",
-    "            username.append(tweet.user.screen_name)\n",
-    "            time.sleep(0.1) \n",
-    "            bar.update(i) \n",
-    "\n",
-    "        twit_prep = []\n",
-    "        for twit in Tweet:\n",
-    "            Twit=' '.join(re.sub(\"(@[A-Za-z0-9]+)|([^0-9A-Za-z \\t])|(\\w+:\\/\\/\\S+)\",\n",
-    "                                  \" \", twit).split())\n",
-    "            twit_prep.append(Twit.lower())\n",
-    "        \n",
-    "        sentiment = [-999 for i in range(len(Tanggal))] \n",
-    "        input_list = list(zip(tweetid, Tanggal, username, twit_prep, sentiment))\n",
-    "        \n",
-    "        koneksi = sqlite3.connect(basisdata)\n",
-    "        query = '''create table if not exists twitter(\n",
-    "                        Tweet_id INTEGER PRIMARY KEY,\n",
-    "                        Tanggal TEXT,\n",
-    "                        Username TEXT,\n",
-    "                        Tweet TEXT,\n",
-    "                        Sentiment INTEGER);'''\n",
-    "        cursor = koneksi.cursor()\n",
-    "        cursor.execute(query)\n",
-    "        koneksi.commit()\n",
-    "        \n",
-    "        insert_query = '''insert or ignore into twitter(Tweet_id, \n",
-    "                                        Tanggal, Username, Tweet, Sentiment) values (?,?,?,?,?);'''\n",
-    "        \n",
-    "        cursor.executemany(insert_query, input_list)\n",
-    "        koneksi.commit()\n",
-    "        cursor.close()\n",
-    "        return koneksi\n",
-    "    \n",
-    "    def get_tweetid(self, koneksi):\n",
-    "        query = 'select Tweet_id from twitter'\n",
-    "        cur = koneksi.cursor()\n",
-    "        cur.execute(query)\n",
-    "        tweetid = cur.fetchall()\n",
-    "        cur.close()\n",
-    "        return tweetid\n",
-    "    \n",
-    "    def get_sentiment(self, koneksi):\n",
-    "        query = 'select Sentiment from twitter'\n",
-    "        cur = koneksi.cursor()\n",
-    "        cur.execute(query)\n",
-    "        sentiment = cur.fetchall()\n",
-    "        cur.close()\n",
-    "        return sentiment\n",
-    "    \n",
-    "    def get_tweet(self, koneksi):\n",
-    "        query = 'select Tweet from twitter'\n",
-    "        cur = koneksi.cursor()\n",
-    "        cur.execute(query)\n",
-    "        tweet = cur.fetchall()\n",
-    "        cur.close()\n",
-    "        return tweet\n",
-    "    \n",
-    "    def get_akun(self, koneksi):\n",
-    "        query = 'select Username from twitter'\n",
-    "        cur = koneksi.cursor()\n",
-    "        cur.execute(query)\n",
-    "        username = cur.fetchall()\n",
-    "        cur.close()\n",
-    "        return username\n",
-    "    \n",
-    "    def get_tanggal(self, koneksi):\n",
-    "        query = 'select Tanggal from twitter'\n",
-    "        cur = koneksi.cursor()\n",
-    "        cur.execute(query)\n",
-    "        tanggal = cur.fetchall()\n",
-    "        cur.close()\n",
-    "        return tanggal\n",
-    "    \n",
-    "    def update_nilai_sentiment(self, basisdata):\n",
-    "        koneksi = sqlite3.connect(basisdata)\n",
-    "        \n",
-    "        tweetid = self.get_tweetid(koneksi)\n",
-    "        sentiment = self.get_sentiment(koneksi)\n",
-    "        twet_prep = self.get_tweet(koneksi)\n",
-    "        \n",
-    "        tweetid = [t[0] for t in tweetid]\n",
-    "        sentiment = [t[0] for t in sentiment]\n",
-    "        twet_prep = [t[0] for t in twet_prep]\n",
-    "        \n",
-    "#         nor_list = open(\"./normalisasi.txt\",\"r\")\n",
-    "#         nor_kata = nor_list.readlines()\n",
-    "        \n",
-    "#         list_nor = []\n",
-    "#         for i in nor_kata:\n",
-    "#             list_nor.append([i.split('\\t')[0], i.split('\\t')[1].strip('\\n')])\n",
-    "# #         print(list_nor)\n",
-    "        \n",
-    "\n",
-    "#         print(twet_prep[:10])\n",
-    "#         twet_nor = []\n",
-    "#         for twit in twet_prep:\n",
-    "# #             print(twit.split(' '))\n",
-    "#             for i, nor in enumerate(list_nor):\n",
-    "#                 if nor[0] in twit.split(' '): \n",
-    "#                     twet_nor.append([isi.replace(nor[0],nor[1]) for isi in twit.split(' ')])\n",
-    "#                     print(i, '->', nor[0], '->', [isi.replace(nor[0],nor[1]) for isi in twit.split(' ')])\n",
-    "#             twet_nor.append(twit)\n",
-    "        \n",
-    "#         for i in twet_nor:\n",
-    "#             print(i) \n",
-    "    \n",
-    "#         twet_normal = [i[0] for i in twet_nor]\n",
-    "#         if 'jgn' in twet_normal:\n",
-    "#             print('ya')\n",
-    "#         print(twet_normal)\n",
-    "        \n",
-    "        pos_list = open(\"./kata_positif.txt\",\"r\")\n",
-    "        pos_kata = pos_list.readlines()\n",
-    "        neg_list = open(\"./kata_negatif.txt\",\"r\")\n",
-    "        neg_kata = neg_list.readlines()\n",
-    "        \n",
-    "        bar = progressbar.ProgressBar(max_value=len(tweetid),widgets=widgets).start()  \n",
-    "        \n",
-    "        hasil_sentiment = []\n",
-    "        for i,item in enumerate(twet_prep):\n",
-    "            count_p = 0; count_n = 0\n",
-    "            for kata_pos in pos_kata:\n",
-    "                if kata_pos.strip() in item:\n",
-    "                    count_p +=1\n",
-    "            for kata_neg in neg_kata:\n",
-    "                if kata_neg.strip() in item:\n",
-    "                    count_n +=1\n",
-    "            hasil_sentiment.append(count_p-count_n)\n",
-    "            time.sleep(0.1) \n",
-    "            bar.update(i)\n",
-    "        \n",
-    "        input_list = list(zip(hasil_sentiment, tweetid))\n",
-    "        \n",
-    "        query = 'update twitter set Sentiment = ? where Tweet_id = ?;'\n",
-    "        cur = koneksi.cursor()\n",
-    "        cur.executemany(query, input_list) \n",
-    "        koneksi.commit()\n",
-    "        cur.close() \n",
-    "    \n",
-    "    def lihat_data(self, basisdata, tanggal_awal, tanggal_akhir):\n",
-    "        koneksi = sqlite3.connect(basisdata)\n",
-    "        \n",
-    "        tanggal = self.get_tanggal(koneksi)\n",
-    "        akun = self.get_akun(koneksi)\n",
-    "        tweet = self.get_tweet(koneksi)\n",
-    "        \n",
-    "        akun = [t[0] for t in akun]\n",
-    "        tweet = [t[0] for t in tweet]\n",
-    "        \n",
-    "        tgl = [t[0].split(' ')[0] for t in tanggal] \n",
-    "        \n",
-    "        indeks_awal = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_awal][0]\n",
-    "        indeks_akhir = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_akhir][0]\n",
-    "        \n",
-    "        entry_akun = [akun[k] for k in range(indeks_awal, indeks_akhir)]\n",
-    "        entry_tanggal = [tgl[k] for k in range(indeks_awal, indeks_akhir)]\n",
-    "        entry_tweet = [tweet[k] for k in range(indeks_awal, indeks_akhir)]\n",
-    "                \n",
-    "        df = pd.DataFrame({'nama akun':entry_akun, 'tanggal tweet':entry_tanggal, \n",
-    "                           'Tweet':entry_tweet})\n",
-    "        display(df)\n",
-    "    \n",
-    "    def visualisasi(self, basisdata, tanggal_awal, tanggal_akhir):\n",
-    "        koneksi = sqlite3.connect(basisdata)\n",
-    "        \n",
-    "        tanggal = self.get_tanggal(koneksi)\n",
-    "        sentiment = self.get_sentiment(koneksi)\n",
-    "        sentiment = [t[0] for t in sentiment]\n",
-    "        \n",
-    "        tgl = [t[0].split(' ')[0] for t in tanggal] \n",
-    "\n",
-    "        indeks_awal = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_awal][0]\n",
-    "        indeks_akhir = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_akhir][0]\n",
-    "                \n",
-    "        entry_sentiment = [sentiment[k] for k in range(indeks_awal, indeks_akhir)]\n",
-    "        \n",
-    "        labels, counts = np.unique(entry_sentiment, return_counts=True)\n",
-    "        plt.subplots(figsize=(12,8), dpi=100)\n",
-    "        plt.bar(labels, counts, align='center')\n",
-    "        plt.gca().set_xticks(labels)\n",
-    "        plt.title('Analisis Sentimen vaksin covid dengan menggunakan media Twitter')\n",
-    "\n",
-    "        print(\"Nilai rata-rata: \"+str(np.mean(entry_sentiment)))\n",
-    "        print(\"Median: \"+str(np.median(entry_sentiment)))\n",
-    "        print(\"Standar deviasi: \"+str(np.std(entry_sentiment)))\n",
-    "        \n",
-    "        plt.show()\n",
-    "\n",
-    "search_words = 'vaksin covid'\n",
-    "date_since = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')\n",
-    "date_until = datetime.now().strftime('%Y-%m-%d')\n",
-    "basisdata = 'wisnuadipradana17.db'\n",
-    "\n",
-    "widgets = [' [', progressbar.Timer(format= 'elapsed time: %(elapsed)s'),  '] ', \n",
-    "           progressbar.Bar('*'),' (', \n",
-    "           progressbar.ETA(), ') ', ] \n",
-    "\n",
-    "while True:\n",
-    "    print('Apa yang ingin Anda lakukan?')\n",
-    "    print('\\t 1. Update Data')\n",
-    "    print('\\t 2. Update Nilai Sentiment')\n",
-    "    print('\\t 3. Lihat Data')\n",
-    "    print('\\t 4. Visualisasi')\n",
-    "    print('\\t 5. Keluar')\n",
-    "    a = input('\\tInput Anda : ')\n",
-    "    Tugas_akhir = sanbercode()\n",
-    "    if int(a) == 1:\n",
-    "        Tugas_akhir.update_data(search_words, date_since, date_until, basisdata)\n",
-    "        print('\\n database telah diupdate\\n')\n",
-    "    elif int(a) == 2:\n",
-    "        Tugas_akhir.update_nilai_sentiment(basisdata)\n",
-    "        print('\\n sentiment telah diupdate\\n')\n",
-    "    elif int(a) == 3:\n",
-    "        tanggal_awal = input('tanggal awal  (format YYYY-MM-DD): ')\n",
-    "        tanggal_akhir = input('tanggal akhir (format YYYY-MM-DD): ')\n",
-    "        Tugas_akhir.lihat_data(basisdata, tanggal_awal, tanggal_akhir)\n",
-    "        print('\\n')\n",
-    "    elif int(a) == 4:\n",
-    "        tanggal_awal = input('tanggal awal  (format YYYY-MM-DD): ')\n",
-    "        tanggal_akhir = input('tanggal akhir (format YYYY-MM-DD): ')\n",
-    "        Tugas_akhir.visualisasi(basisdata, tanggal_awal, tanggal_akhir)\n",
-    "        print('\\n')\n",
-    "    elif int(a) == 5:\n",
-    "        clear_output(wait = True)\n",
-    "        print('Anda telah keluar dari aplikasi')\n",
-    "        break\n",
-    "    else:\n",
-    "        print('input tidak sesuai\\n') \n",
-    "        pass"
-   ]
-  }
- ],
- "metadata": {
-  "hide_input": false,
-  "kernelspec": {
-   "display_name": "Python 3",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.7.7"
-  },
-  "latex_envs": {
-   "LaTeX_envs_menu_present": true,
-   "autoclose": false,
-   "autocomplete": true,
-   "bibliofile": "biblio.bib",
-   "cite_by": "apalike",
-   "current_citInitial": 1,
-   "eqLabelWithNumbers": false,
-   "eqNumInitial": 1,
-   "hotkeys": {
-    "equation": "Ctrl-E",
-    "itemize": "Ctrl-I"
-   },
-   "labels_anchors": false,
-   "latex_user_defs": false,
-   "report_style_numbering": false,
-   "user_envs_cfg": false
-  },
-  "toc": {
-   "base_numbering": 1,
-   "nav_menu": {},
-   "number_sections": true,
-   "sideBar": true,
-   "skip_h1_title": false,
-   "title_cell": "Table of Contents",
-   "title_sidebar": "Contents",
-   "toc_cell": false,
-   "toc_position": {},
-   "toc_section_display": true,
-   "toc_window_display": false
-  },
-  "varInspector": {
-   "cols": {
-    "lenName": 16,
-    "lenType": 16,
-    "lenVar": 40
-   },
-   "kernels_config": {
-    "python": {
-     "delete_cmd_postfix": "",
-     "delete_cmd_prefix": "del ",
-     "library": "var_list.py",
-     "varRefreshCmd": "print(var_dic_list())"
-    },
-    "r": {
-     "delete_cmd_postfix": ") ",
-     "delete_cmd_prefix": "rm(",
-     "library": "var_list.r",
-     "varRefreshCmd": "cat(var_dic_list()) "
-    }
-   },
-   "types_to_exclude": [
-    "module",
-    "function",
-    "builtin_function_or_method",
-    "instance",
-    "_Feature"
-   ],
-   "window_display": false
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 4
-}
+import tweepy
+import sqlite3
+import pandas as pd
+import re
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+from IPython.display import clear_output
+import time 
+import progressbar 
+
+class sanbercode():
+    def __init__ (self):
+        pass
+    
+    def update_data(self, search_words, date_since, date_until, basisdata):
+        tokens = pd.read_csv('Token_API_Twitter_Anda.csv')
+
+        consumer_key = tokens.iloc[0][1]
+        consumer_secret = tokens.iloc[0][2]
+        access_token = tokens.iloc[0][3]
+        access_token_secret = tokens.iloc[0][4]
+
+        auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+        auth.set_access_token(access_token, access_token_secret)
+        api = tweepy.API(auth)
+        
+        new_search = search_words + " -filter:retweets"
+
+        tweets_covid = tweepy.Cursor(api.search, 
+                               q = new_search,
+                               tweet_mode='extended',
+                               lang='id',
+                               since=date_since,
+                               until=date_until,
+                               result_type='recent',
+                               include_entities=True,
+                               monitor_rate_limit=True, 
+                               wait_on_rate_limit=True).items()
+        
+        max_value=len([i.id for i in tweets_covid])
+        bar = progressbar.ProgressBar(max_value, widgets=widgets).start() 
+        
+        Tanggal = []; Tweet = []; tweetid = []; username=[]
+        for i,tweet in enumerate(tweets_covid):
+            Tweet.append(tweet.full_text.strip())
+            Tanggal.append(tweet.created_at) 
+            tweetid.append(tweet.id)
+            username.append(tweet.user.screen_name)
+            time.sleep(0.1) 
+            bar.update(i) 
+
+        twit_prep = []
+        for twit in Tweet:
+            Twit=' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t])|(\w+:\/\/\S+)",
+                                  " ", twit).split())
+            twit_prep.append(Twit.lower())
+        
+        sentiment = [-999 for i in range(len(Tanggal))] 
+        input_list = list(zip(tweetid, Tanggal, username, twit_prep, sentiment))
+        
+        koneksi = sqlite3.connect(basisdata)
+        query = '''create table if not exists twitter(
+                        Tweet_id INTEGER PRIMARY KEY,
+                        Tanggal TEXT,
+                        Username TEXT,
+                        Tweet TEXT,
+                        Sentiment INTEGER);'''
+        cursor = koneksi.cursor()
+        cursor.execute(query)
+        koneksi.commit()
+        
+        insert_query = '''insert or ignore into twitter(Tweet_id, 
+                                        Tanggal, Username, Tweet, Sentiment) values (?,?,?,?,?);'''
+        
+        cursor.executemany(insert_query, input_list)
+        koneksi.commit()
+        cursor.close()
+        return koneksi
+    
+    def get_tweetid(self, koneksi):
+        query = 'select Tweet_id from twitter'
+        cur = koneksi.cursor()
+        cur.execute(query)
+        tweetid = cur.fetchall()
+        cur.close()
+        return tweetid
+    
+    def get_sentiment(self, koneksi):
+        query = 'select Sentiment from twitter'
+        cur = koneksi.cursor()
+        cur.execute(query)
+        sentiment = cur.fetchall()
+        cur.close()
+        return sentiment
+    
+    def get_tweet(self, koneksi):
+        query = 'select Tweet from twitter'
+        cur = koneksi.cursor()
+        cur.execute(query)
+        tweet = cur.fetchall()
+        cur.close()
+        return tweet
+    
+    def get_akun(self, koneksi):
+        query = 'select Username from twitter'
+        cur = koneksi.cursor()
+        cur.execute(query)
+        username = cur.fetchall()
+        cur.close()
+        return username
+    
+    def get_tanggal(self, koneksi):
+        query = 'select Tanggal from twitter'
+        cur = koneksi.cursor()
+        cur.execute(query)
+        tanggal = cur.fetchall()
+        cur.close()
+        return tanggal
+    
+    def update_nilai_sentiment(self, basisdata):
+        koneksi = sqlite3.connect(basisdata)
+        
+        tweetid = self.get_tweetid(koneksi)
+        sentiment = self.get_sentiment(koneksi)
+        twet_prep = self.get_tweet(koneksi)
+        
+        tweetid = [t[0] for t in tweetid]
+        sentiment = [t[0] for t in sentiment]
+        twet_prep = [t[0] for t in twet_prep]
+        
+        df_normal = pd.read_csv('normalisasi.csv')
+        kamus_normal = dict(zip(df_normal.slang, df_normal.formal))
+        
+        kata = TextBlob(kalimat).words
+        for i,t in enumerate(kata):
+            if t in kamus_normal.keys():
+                kata[i]=kamus_normal[t]
+        twet_normal = ' '.join(kata)
+        
+        pos_list = open("./kata_positif.txt","r")
+        pos_kata = pos_list.readlines()
+        neg_list = open("./kata_negatif.txt","r")
+        neg_kata = neg_list.readlines()
+        
+        bar = progressbar.ProgressBar(max_value=len(tweetid),widgets=widgets).start()  
+        
+        hasil_sentiment = []
+        for i,item in enumerate(twet_normal):
+            count_p = 0; count_n = 0
+            for kata_pos in pos_kata:
+                if kata_pos.strip() in item:
+                    count_p +=1
+            for kata_neg in neg_kata:
+                if kata_neg.strip() in item:
+                    count_n +=1
+            hasil_sentiment.append(count_p-count_n)
+            time.sleep(0.1) 
+            bar.update(i)
+        
+        input_list = list(zip(hasil_sentiment, tweetid))
+        
+        query = 'update twitter set Sentiment = ? where Tweet_id = ?;'
+        cur = koneksi.cursor()
+        cur.executemany(query, input_list) 
+        koneksi.commit()
+        cur.close() 
+    
+    def lihat_data(self, basisdata, tanggal_awal, tanggal_akhir):
+        koneksi = sqlite3.connect(basisdata)
+        
+        tanggal = self.get_tanggal(koneksi)
+        akun = self.get_akun(koneksi)
+        tweet = self.get_tweet(koneksi)
+        
+        akun = [t[0] for t in akun]
+        tweet = [t[0] for t in tweet]
+        
+        tgl = [t[0].split(' ')[0] for t in tanggal] 
+        
+        indeks_awal = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_awal][0]
+        indeks_akhir = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_akhir][0]
+        
+        entry_akun = [akun[k] for k in range(indeks_awal, indeks_akhir)]
+        entry_tanggal = [tgl[k] for k in range(indeks_awal, indeks_akhir)]
+        entry_tweet = [tweet[k] for k in range(indeks_awal, indeks_akhir)]
+                
+        df = pd.DataFrame({'nama akun':entry_akun, 'tanggal tweet':entry_tanggal, 
+                           'Tweet':entry_tweet})
+        display(df)
+    
+    def visualisasi(self, basisdata, tanggal_awal, tanggal_akhir):
+        koneksi = sqlite3.connect(basisdata)
+        
+        tanggal = self.get_tanggal(koneksi)
+        sentiment = self.get_sentiment(koneksi)
+        sentiment = [t[0] for t in sentiment]
+        
+        tgl = [t[0].split(' ')[0] for t in tanggal] 
+
+        indeks_awal = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_awal][0]
+        indeks_akhir = [i for i, Tgl in enumerate(tgl) if Tgl == tanggal_akhir][0]
+                
+        entry_sentiment = [sentiment[k] for k in range(indeks_awal, indeks_akhir)]
+        
+        labels, counts = np.unique(entry_sentiment, return_counts=True)
+        plt.subplots(figsize=(12,8), dpi=100)
+        plt.bar(labels, counts, align='center')
+        plt.gca().set_xticks(labels)
+        plt.title('Analisis Sentimen vaksin covid dengan menggunakan media Twitter')
+
+        print("Nilai rata-rata: "+str(np.mean(entry_sentiment)))
+        print("Median: "+str(np.median(entry_sentiment)))
+        print("Standar deviasi: "+str(np.std(entry_sentiment)))
+        
+        plt.show()
+
+date_since = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+date_until = datetime.now().strftime('%Y-%m-%d')
+basisdata = 'wisnuadipradana17.db'
+
+widgets = [' [', progressbar.Timer(format= 'elapsed time: %(elapsed)s'),  '] ', 
+           progressbar.Bar('*'),' (', 
+           progressbar.ETA(), ') ', ] 
+
+while True:
+    print('Apa yang ingin Anda lakukan?')
+    print('\t 1. Update Data')
+    print('\t 2. Update Nilai Sentiment')
+    print('\t 3. Lihat Data')
+    print('\t 4. Visualisasi')
+    print('\t 5. Keluar')
+    a = input('\tInput Anda : ')
+    Tugas_akhir = sanbercode()
+    if int(a) == 1:
+        search_words = input('\tmasukkan keywords : ')
+        Tugas_akhir.update_data(search_words, date_since, date_until, basisdata)
+        print('\n database telah diupdate\n')
+    elif int(a) == 2:
+        Tugas_akhir.update_nilai_sentiment(basisdata)
+        print('\n sentiment telah diupdate\n')
+    elif int(a) == 3:
+        tanggal_awal = input('tanggal awal  (format YYYY-MM-DD): ')
+        tanggal_akhir = input('tanggal akhir (format YYYY-MM-DD): ')
+        Tugas_akhir.lihat_data(basisdata, tanggal_awal, tanggal_akhir)
+        print('\n')
+    elif int(a) == 4:
+        tanggal_awal = input('tanggal awal  (format YYYY-MM-DD): ')
+        tanggal_akhir = input('tanggal akhir (format YYYY-MM-DD): ')
+        Tugas_akhir.visualisasi(basisdata, tanggal_awal, tanggal_akhir)
+        print('\n')
+    elif int(a) == 5:
+        clear_output(wait = True)
+        print('Anda telah keluar dari aplikasi')
+        break
+    else:
+        print('input tidak sesuai\n') 
+        pass
