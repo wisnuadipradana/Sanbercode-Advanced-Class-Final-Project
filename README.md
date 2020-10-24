@@ -19,6 +19,6 @@ Sentiment Analysis Sederhana dari Data API Twitter
 
 -->
 
-![ERD, app](/wisnuadipradana/Sanbercode-Advanced-Class-Final-Project/ERD_app.jpg)
+
 
 
